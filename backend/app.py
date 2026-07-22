@@ -40,8 +40,9 @@ app = FastAPI(title="So Korean AI Order Analyzer")
 # Tighten allow_origins to your deployed frontend domain before going live.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://so-korean-ai.vercel.app/"],
-    allow_methods=["POST"],
+    allow_origins=["https://so-korean-ai.vercel.app"],
+    allow_credentials=True,
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
