@@ -2,7 +2,7 @@
    Backend — all pricing math now lives server-side in calculator.py.
    Update this once the API is deployed (Render/Railway, etc).
    =================================================================== */
-const API_BASE_URL = "http://localhost:8000";
+const API_BASE_URL = "https://so-kkorean-ai.onrender.com/";
 
 /* ---------- Elements ---------- */
 const pageInput = document.getElementById("page-input");
