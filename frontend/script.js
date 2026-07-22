@@ -69,12 +69,12 @@ function renderResult(data){
   document.getElementById("outProductName").textContent = data.productName;
   document.getElementById("outStore").textContent =
     data.store === "style_korean" ? "StyleKorean" : "YesStyle";
-  // document.getElementById("outTimeDeal").textContent =
-  //   data.store === "style_korean"
-  //     ? (data.timeDeal ? "Yes" : "No")
-  //     : (data.eligibleForCode ? "Eligible for code" : "Not eligible");
-  // document.getElementById("outPrice").textContent = "$" + data.price.toLocaleString();
-  // document.getElementById("outWeight").textContent = data.weight.toLocaleString() + " g";
+  document.getElementById("outTimeDeal").textContent =
+    data.store === "style_korean"
+      ? (data.timeDeal ? "Yes" : "No")
+      : (data.eligibleForCode ? "Eligible for code" : "Not eligible");
+  document.getElementById("outPrice").textContent = "$" + data.price.toLocaleString();
+  document.getElementById("outWeight").textContent = data.weight.toLocaleString() + " g";
   document.getElementById("outTotalEGP").textContent =
     Math.round(data.totalEGP).toLocaleString() + " EGP";
 }
