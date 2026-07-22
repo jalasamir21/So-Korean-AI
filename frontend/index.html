@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>So Korean — AI Order Analyzer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="assets/logo.png" sizes="32x32">
+<link rel="apple-touch-icon" href="assets/logo.png">
+</head>
+<body>
+
+<div class="scene">
+
+  <header class="brand">
+    <div class="logo-container">
+      <img src="assets/logo.png" alt="SoKorean Logo" class="logo">
+      <h1>So Korean</h1>
+    </div>
+  </header>
+
+  <main class="stage">
+
+    <!-- STATE 1 — paste link -->
+    <section class="page is-active" id="page-input">
+      <h2 class="page__title">&#10024; AI Order Analyzer</h2>
+      <p class="page__hint">Paste a StyleKorean or YesStyle product link — I'll work out the total for you.</p>
+
+      <div class="card">
+        <label class="field" for="productLink">
+          Product link
+          <div class="input-affix">
+            <input type="url" id="productLink" placeholder="https://www.stylekorean.com/..." autocomplete="off">
+          </div>
+        </label>
+
+        <button class="btn-primary" id="analyzeBtn" type="button">Analyze product</button>
+        <p class="field-error" id="linkError"></p>
+      </div>
+    </section>
+
+    <!-- STATE 2 — analyzing -->
+    <section class="page" id="page-analyzing">
+      <div class="card analyzing-card">
+        <h3 class="analyzing-title">Analyzing product&hellip;</h3>
+        <ul class="analyzing-steps" id="analyzingSteps">
+          <li data-step="detect"><span class="step-icon"></span><span class="step-label">Detecting website</span></li>
+          <li data-step="read"><span class="step-icon"></span><span class="step-label">Reading product</span></li>
+          <li data-step="promo"><span class="step-icon"></span><span class="step-label">Checking promotion</span></li>
+          <li data-step="total"><span class="step-icon"></span><span class="step-label">Calculating total</span></li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- STATE 2.5 — needs weight (YesStyle only, no weight on the page) -->
+    <section class="page" id="page-weight">
+      <button class="back-link" id="cancelWeightBtn" type="button">&larr; Analyze another link</button>
+
+      <h2 class="page__title">One more thing</h2>
+      <p class="page__hint">YesStyle doesn't list a shipping weight for this product. Enter it if you know it, or look up the same product on StyleKorean and use the "Gross Weight" shown there.</p>
+
+      <div class="card">
+        <label class="field" for="weightInput">
+          Weight (grams)
+          <div class="input-affix">
+            <input type="number" id="weightInput" placeholder="e.g. 120" min="1" step="1" autocomplete="off">
+          </div>
+        </label>
+
+        <button class="btn-primary" id="submitWeightBtn" type="button">Continue</button>
+        <p class="field-error" id="weightError"></p>
+      </div>
+    </section>
+
+    <!-- STATE 3 — result -->
+    <section class="page" id="page-result">
+      <button class="back-link" id="newSearchBtn" type="button">&larr; Analyze another link</button>
+
+      <h2 class="page__title">Here's what I found</h2>
+
+      <div class="card result-card">
+        <div class="result__row"><span>Product</span><span id="outProductName">—</span></div>
+        <div class="result__row"><span>Store</span><span id="outStore">—</span></div>
+        <div class="result__row"><span>Time deal</span><span id="outTimeDeal">—</span></div>
+        <div class="result__row"><span>Price</span><span id="outPrice">—</span></div>
+        <div class="result__row"><span>Weight</span><span id="outWeight">—</span></div>
+
+        <hr>
+
+        <div class="result__total">
+          <span>Total</span>
+          <span id="outTotalEGP">—</span>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+</div>
+
+<script src="animations.js"></script>
+<script src="script.js"></script>
+</body>
+</html>

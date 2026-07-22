@@ -1,0 +1,314 @@
+/* ===================================================================
+   SoKorean — tokens
+   =================================================================== */
+:root{
+  --bg: #F3F0F5;
+  --ink: #241B2C;
+  --ink-soft: #6E6478;
+  --paper: #FFFFFF;
+  --berry: #C2447A;
+  --berry-deep: #9C2E5F;
+  --jade: #3E8E7E;
+  --jade-deep: #2B6A5D;
+  --blush: #F3D9DF;
+  --line: #E4DEEA;
+  --shadow: 0 20px 40px -20px rgba(36, 27, 44, 0.35);
+  --radius: 20px;
+}
+
+*{ box-sizing: border-box; }
+
+.logo-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.logo {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #fff;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+body{
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 12% 8%, #EADCF0 0%, transparent 45%),
+    radial-gradient(circle at 88% 92%, #DCEDE7 0%, transparent 40%),
+    var(--bg);
+  font-family: 'Manrope', sans-serif;
+  color: var(--ink);
+  display: flex;
+  justify-content: center;
+  padding: 48px 20px 80px;
+}
+
+.scene{
+  width: 100%;
+  max-width: 460px;
+}
+
+/* ===================================================================
+   Brand header
+   =================================================================== */
+.brand{
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 32px;
+}
+.brand h1{
+  font-family: 'Fraunces', serif;
+  font-size: 26px;
+  font-weight: 600;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+/* ===================================================================
+   Pages
+   =================================================================== */
+.stage{ position: relative; }
+
+.page{
+  display: none;
+  animation: rise 0.4s ease;
+}
+.page.is-active{ display: block; }
+
+@keyframes rise{
+  from{ opacity: 0; transform: translateY(10px); }
+  to{ opacity: 1; transform: translateY(0); }
+}
+
+.page__title{
+  font-family: 'Fraunces', serif;
+  font-weight: 600;
+  font-style: italic;
+  font-size: 24px;
+  margin: 0 0 6px;
+}
+.page__hint{
+  margin: 0 0 22px;
+  color: var(--ink-soft);
+  font-size: 14.5px;
+}
+
+.back-link{
+  background: none;
+  border: none;
+  padding: 0;
+  margin-bottom: 18px;
+  color: var(--berry-deep);
+  font-weight: 700;
+  font-size: 13.5px;
+  cursor: pointer;
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+.back-link:hover{ text-decoration: underline; }
+
+/* ===================================================================
+   Card + fields (shared)
+   =================================================================== */
+.card{
+  background: var(--paper);
+  border-radius: var(--radius);
+  padding: 26px 22px;
+  box-shadow: var(--shadow);
+}
+
+.field{
+  display: block;
+  font-size: 12.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-soft);
+  margin-bottom: 16px;
+}
+.input-affix{
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 14px;
+  transition: border-color 0.2s ease;
+}
+.input-affix:focus-within{
+  border-color: var(--berry);
+}
+.input-affix span{
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+.input-affix input{
+  border: none;
+  outline: none;
+  font-family: 'Manrope', sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+  width: 100%;
+  background: transparent;
+}
+
+.field-error{
+  min-height: 16px;
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--berry-deep);
+}
+
+.btn-primary{
+  width: 100%;
+  border: none;
+  border-radius: 12px;
+  padding: 14px;
+  margin-top: 4px;
+  background: linear-gradient(145deg, var(--jade), var(--jade-deep));
+  color: #fff;
+  font-family: 'Manrope', sans-serif;
+  font-size: 14.5px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.btn-primary:hover{
+  transform: translateY(-2px);
+  box-shadow: 0 12px 24px -12px rgba(43, 106, 93, 0.6);
+}
+.btn-primary:active{ transform: translateY(0); }
+.btn-primary:disabled{
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* ===================================================================
+   Analyzing state
+   =================================================================== */
+.analyzing-card{
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.analyzing-title{
+  font-family: 'Fraunces', serif;
+  font-style: italic;
+  font-weight: 600;
+  font-size: 18px;
+  margin: 0;
+}
+.analyzing-steps{
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.analyzing-steps li{
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--line);
+  transition: color 0.3s ease;
+}
+.analyzing-steps li.is-active,
+.analyzing-steps li.is-done{
+  color: var(--ink);
+}
+.step-icon{
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  flex-shrink: 0;
+  position: relative;
+  transition: border-color 0.3s ease, background 0.3s ease;
+}
+.analyzing-steps li.is-active .step-icon{
+  border-color: var(--jade);
+  animation: pulse 0.9s ease infinite;
+}
+.analyzing-steps li.is-done .step-icon{
+  border-color: transparent;
+  background: linear-gradient(145deg, var(--jade), var(--jade-deep));
+}
+.analyzing-steps li.is-done .step-icon::after{
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: 2px;
+  width: 5px;
+  height: 9px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+@keyframes pulse{
+  0%, 100%{ box-shadow: 0 0 0 0 rgba(62, 142, 126, 0.35); }
+  50%{ box-shadow: 0 0 0 6px rgba(62, 142, 126, 0); }
+}
+
+/* ===================================================================
+   Result — "compact mirror" card
+   =================================================================== */
+.result-card{
+  border: 1.5px solid var(--blush);
+}
+.result__row{
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13.5px;
+  color: var(--ink-soft);
+  padding: 6px 0;
+}
+.result__row span:last-child{
+  color: var(--ink);
+  font-weight: 700;
+  text-align: right;
+}
+.result hr{
+  border: none;
+  border-top: 1px dashed var(--line);
+  margin: 12px 0;
+}
+.result__total{
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-family: 'Fraunces', serif;
+}
+.result__total span:first-child{
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+.result__total span:last-child{
+  font-size: 26px;
+  font-weight: 600;
+  color: var(--berry-deep);
+}
+
+/* ===================================================================
+   Responsive
+   =================================================================== */
+@media (max-width: 380px){
+  .scene{ max-width: 100%; }
+}
