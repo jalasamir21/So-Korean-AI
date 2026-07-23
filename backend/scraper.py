@@ -45,10 +45,32 @@ USER_AGENT = (
 )
 MIN_TEXT_LENGTH = 500  # below this, assume the page needs JS to render
 
+# Phrases that show up on bot-check / interstitial pages instead of real
+# product content. If we see these, the page was NOT the product page —
+# even if it's long enough to pass the MIN_TEXT_LENGTH check — and must
+# never be handed to the parser or the LLM, since either would end up
+# guessing a plausible-looking but wrong price.
+BOT_CHALLENGE_SIGNALS = (
+    "verify you are human",
+    "checking your browser",
+    "access denied",
+    "are you a robot",
+    "unusual traffic",
+    "captcha",
+    "please enable javascript and cookies",
+    "just a moment",       # Cloudflare challenge title
+    "attention required",  # Cloudflare
+    "request blocked",
+)
+
 REQUIRED_FIELDS_BY_STORE = {
     "style_korean": {"productName", "price", "weight", "timeDeal"},
     "yes_style": {"productName", "price", "weight", "eligibleForCode"},
 }
+
+
+class BlockedPageError(Exception):
+    """Raised when the fetched page is a bot-check/interstitial, not real product content."""
 
 
 def detect_store(url: str) -> Optional[str]:
@@ -67,42 +89,45 @@ async def fetch_page_html(url: str) -> str:
     confirmed sufficient for StyleKorean). Falls back to a headless
     browser for pages that need JS to render, or that block a bare
     request (YesStyle did during development).
+
+    Raises BlockedPageError if even the Playwright retry comes back as a
+    bot-check page — sites like YesStyle can treat a hosting provider's
+    IP as suspicious even when a real browser is driving the request, and
+    that must surface as a loud error, never a silently wrong total.
     """
     async with httpx.AsyncClient(follow_redirects=True, timeout=15) as client:
         try:
             resp = await client.get(
                 url,
-                headers={
-                    "User-Agent": USER_AGENT,
-                    "Accept-Language": "en-US,en;q=0.9",
-                },
+                headers={"User-Agent": USER_AGENT, "Accept-Language": "en-US,en;q=0.9"},
             )
             resp.raise_for_status()
             html = resp.text
         except httpx.HTTPStatusError:
             html = ""
 
-    needs_playwright = not html or _looks_incomplete(html)
-
-    print("=" * 60)
-    print("URL:", url)
-    print("HTTP HTML length:", len(html))
-    print("Needs Playwright:", needs_playwright)
-
-    if needs_playwright:
-        print("Using Playwright...")
+    if not html or _looks_incomplete(html) or _looks_blocked(html):
         html = await _fetch_with_playwright(url)
-    else:
-        print("Using HTTP response...")
 
-    print("Final HTML length:", len(html))
-    print("=" * 60)
+    if _looks_blocked(html):
+        raise BlockedPageError(
+            "The site's bot protection blocked this request, even after retrying with a "
+            "full browser. Try again in a bit, or from a different network."
+        )
 
     return html
+
 
 def _looks_incomplete(html: str) -> bool:
     text = BeautifulSoup(html, "html.parser").get_text(strip=True)
     return len(text) < MIN_TEXT_LENGTH
+
+
+def _looks_blocked(html: str) -> bool:
+    if not html:
+        return False
+    text = BeautifulSoup(html, "html.parser").get_text(separator=" ").lower()
+    return any(signal in text for signal in BOT_CHALLENGE_SIGNALS)
 
 
 async def _fetch_with_playwright(url: str) -> str:
@@ -184,8 +209,6 @@ def _parse_style_korean(html: str, url: str) -> dict:
 
 def _parse_yes_style(html: str, url: str) -> dict:
     soup = BeautifulSoup(html, "html.parser")
-    print("=" * 60)
-    print("YESSTYLE PARSER")
     fields: dict = {}
 
     for script in soup.find_all("script", attrs={"type": "application/ld+json"}):
@@ -215,8 +238,7 @@ def _parse_yes_style(html: str, url: str) -> dict:
                     fields.setdefault("weight", float(weight["value"]))
                 except (TypeError, ValueError):
                     pass
-                  
-    print("After JSON-LD:", fields)
+
     if "productName" not in fields:
         title = _meta_content(soup, "og:title")
         if title:
@@ -230,8 +252,6 @@ def _parse_yes_style(html: str, url: str) -> dict:
             except ValueError:
                 pass
 
-    print("After OG:", fields)
- 
     # YesStyle marks non-eligible items with a specific disclaimer line
     # near the coupon/notes section (e.g. "Coupons offering a percentage
     # discount (e.g., 10% off) cannot be used with this product."). When a
@@ -243,8 +263,5 @@ def _parse_yes_style(html: str, url: str) -> dict:
         fields["eligibleForCode"] = False
     else:
         fields["eligibleForCode"] = True
-      
-    print("Final selector fields:", fields)
-    print("=" * 60)
 
     return fields
