@@ -79,10 +79,23 @@ async def fetch_page_html(url: str) -> str:
         except httpx.HTTPStatusError:
             html = ""
 
-    if not html or _looks_incomplete(html):
-        html = await _fetch_with_playwright(url)
+   needs_playwright = not html or _looks_incomplete(html)
 
-    return html
+   print("=" * 60)
+   print("URL:", url)
+   print("HTTP HTML length:", len(html))
+   print("Needs Playwright:", needs_playwright)
+    
+   if needs_playwright:
+      print("Using Playwright...")
+      html = await _fetch_with_playwright(url)
+   else:
+     print("Using HTTP response...")
+    
+   print("Final HTML length:", len(html))
+   print("=" * 60)
+    
+   return html
 
 
 def _looks_incomplete(html: str) -> bool:
@@ -169,6 +182,8 @@ def _parse_style_korean(html: str, url: str) -> dict:
 
 def _parse_yes_style(html: str, url: str) -> dict:
     soup = BeautifulSoup(html, "html.parser")
+    print("=" * 60)
+    print("YESSTYLE PARSER")
     fields: dict = {}
 
     for script in soup.find_all("script", attrs={"type": "application/ld+json"}):
@@ -198,7 +213,8 @@ def _parse_yes_style(html: str, url: str) -> dict:
                     fields.setdefault("weight", float(weight["value"]))
                 except (TypeError, ValueError):
                     pass
-
+                  
+    print("After JSON-LD:", fields)
     if "productName" not in fields:
         title = _meta_content(soup, "og:title")
         if title:
@@ -212,6 +228,9 @@ def _parse_yes_style(html: str, url: str) -> dict:
             except ValueError:
                 pass
 
+   print("Final selector fields:", fields)
+   print("=" * 60)
+ 
     # YesStyle marks non-eligible items with a specific disclaimer line
     # near the coupon/notes section (e.g. "Coupons offering a percentage
     # discount (e.g., 10% off) cannot be used with this product."). When a
@@ -223,5 +242,8 @@ def _parse_yes_style(html: str, url: str) -> dict:
         fields["eligibleForCode"] = False
     else:
         fields["eligibleForCode"] = True
+      
+    print("Final selector fields:", fields)
+    print("=" * 60)
 
     return fields
