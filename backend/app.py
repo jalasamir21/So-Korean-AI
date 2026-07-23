@@ -38,6 +38,12 @@ from agent import extract_product_fields, ExtractionError
 from calculator import calculate_total, CalculationError
 
 logger = logging.getLogger("sokorean")
+logger.setLevel(logging.INFO)
+if not logger.handlers:
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
+    logger.addHandler(_handler)
+    logger.propagate = False
 
 app = FastAPI(title="So Korean AI Order Analyzer")
 
