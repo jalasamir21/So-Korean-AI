@@ -230,7 +230,7 @@ def _parse_yes_style(html: str, url: str) -> dict:
             except ValueError:
                 pass
 
-   print("After OG:", fields)
+    print("After OG:", fields)
  
     # YesStyle marks non-eligible items with a specific disclaimer line
     # near the coupon/notes section (e.g. "Coupons offering a percentage
