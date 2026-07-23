@@ -98,6 +98,7 @@ async def analyze(payload: AnalyzeRequest):
         try:
             page_text = extract_visible_text(html)
             llm_fields = extract_product_fields(store, page_text)
+            print("LLM returned:", llm_fields)
         except ExtractionError as e:
             raise HTTPException(502, f"Couldn't read that product page: {e}")
 
