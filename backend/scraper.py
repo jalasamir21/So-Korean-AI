@@ -72,31 +72,33 @@ async def fetch_page_html(url: str) -> str:
         try:
             resp = await client.get(
                 url,
-                headers={"User-Agent": USER_AGENT, "Accept-Language": "en-US,en;q=0.9"},
+                headers={
+                    "User-Agent": USER_AGENT,
+                    "Accept-Language": "en-US,en;q=0.9",
+                },
             )
             resp.raise_for_status()
             html = resp.text
         except httpx.HTTPStatusError:
             html = ""
 
-   needs_playwright = not html or _looks_incomplete(html)
+    needs_playwright = not html or _looks_incomplete(html)
 
-   print("=" * 60)
-   print("URL:", url)
-   print("HTTP HTML length:", len(html))
-   print("Needs Playwright:", needs_playwright)
-    
-   if needs_playwright:
-      print("Using Playwright...")
-      html = await _fetch_with_playwright(url)
-   else:
-     print("Using HTTP response...")
-    
-   print("Final HTML length:", len(html))
-   print("=" * 60)
-    
-   return html
+    print("=" * 60)
+    print("URL:", url)
+    print("HTTP HTML length:", len(html))
+    print("Needs Playwright:", needs_playwright)
 
+    if needs_playwright:
+        print("Using Playwright...")
+        html = await _fetch_with_playwright(url)
+    else:
+        print("Using HTTP response...")
+
+    print("Final HTML length:", len(html))
+    print("=" * 60)
+
+    return html
 
 def _looks_incomplete(html: str) -> bool:
     text = BeautifulSoup(html, "html.parser").get_text(strip=True)
