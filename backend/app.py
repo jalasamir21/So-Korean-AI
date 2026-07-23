@@ -19,6 +19,7 @@ matching StyleKorean listing to read it off there) and re-calls this
 same endpoint with that weight attached.
 """
 
+import logging
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException
@@ -31,18 +32,20 @@ from scraper import (
     extract_visible_text,
     extract_with_selectors,
     REQUIRED_FIELDS_BY_STORE,
+    BlockedPageError,
 )
 from agent import extract_product_fields, ExtractionError
 from calculator import calculate_total, CalculationError
+
+logger = logging.getLogger("sokorean")
 
 app = FastAPI(title="So Korean AI Order Analyzer")
 
 # Tighten allow_origins to your deployed frontend domain before going live.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://so-korean-ai.vercel.app"],
-    allow_credentials=True,
-    allow_methods=["*"],
+    allow_origins=["*"],
+    allow_methods=["POST"],
     allow_headers=["*"],
 )
 
@@ -76,11 +79,14 @@ async def analyze(payload: AnalyzeRequest):
 
     try:
         html = await fetch_page_html(payload.url)
+    except BlockedPageError as e:
+        raise HTTPException(502, str(e))
     except Exception:
         raise HTTPException(502, "Couldn't reach that product page. Please check the link.")
 
     # Deterministic pass first — meta tags, JSON-LD, labelled spec text.
     fields = extract_with_selectors(store, html, payload.url)
+    logger.info("analyze store=%s url=%s deterministic_fields=%s", store, payload.url, fields)
 
     # YesStyle has no reliable weight signal anywhere on the page, so it's
     # deliberately left out of what the LLM is asked to fill in — guessing
@@ -98,7 +104,6 @@ async def analyze(payload: AnalyzeRequest):
         try:
             page_text = extract_visible_text(html)
             llm_fields = extract_product_fields(store, page_text)
-            print("LLM returned:", llm_fields)
         except ExtractionError as e:
             raise HTTPException(502, f"Couldn't read that product page: {e}")
 
@@ -139,6 +144,8 @@ async def analyze(payload: AnalyzeRequest):
         )
     except CalculationError as e:
         raise HTTPException(422, str(e))
+
+    logger.info("analyze store=%s url=%s final_fields=%s totalEGP=%s", store, payload.url, fields, total_egp)
 
     return AnalyzeResponse(
         store=store,
