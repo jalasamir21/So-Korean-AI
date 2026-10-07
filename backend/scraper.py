@@ -222,12 +222,7 @@ async def _set_yesstyle_preferences(page) -> None:
     await expect(page.locator("#currency-setting-select")).to_contain_text("USD", timeout=45000)
     await expect(page.locator("#language-setting-select")).to_contain_text("English", timeout=45000)
     logger.info("yesstyle step=save_preferences")
-    save = page.get_by_role("button", name="SAVE", exact=True)
-    if await save.is_enabled():
-        await save.click(no_wait_after=True)
-    else:
-        # Preferences may already be correct in a reused site session.
-        await page.get_by_role("button", name="CANCEL", exact=True).click()
+    await _save_yesstyle_preferences(page)
     logger.info("yesstyle step=wait_preferences_closed")
     await page.locator("#location-preference-dialog-title").wait_for(state="hidden")
     # Reload after saving so a previous region's price cannot survive an
@@ -240,6 +235,27 @@ async def _set_yesstyle_preferences(page) -> None:
     await page.locator(YESSTYLE_PRICE_SELECTOR).filter(
         has_text=re.compile(r"^US\$\s*[\d,]+\.\d{2}$")
     ).wait_for()
+
+
+async def _save_yesstyle_preferences(page) -> None:
+    # CSS uppercase does not guarantee an uppercase accessible name.
+    # Inspect the open dialog before choosing Save; never click the product's
+    # wish-list Save button if the preferences dialog disappeared.
+    dialog_title = page.locator("#location-preference-dialog-title")
+    if not await dialog_title.is_visible():
+        logger.error("yesstyle preferences dialog disappeared before save")
+        raise RegionalPricingError(YESSTYLE_REGION_ERROR)
+    buttons = page.get_by_role("button").filter(visible=True)
+    logger.info("yesstyle visible_button_labels=%s", await buttons.all_text_contents())
+    save = page.get_by_role("button", name=re.compile(r"^\s*save\s*$", re.IGNORECASE)).filter(visible=True)
+    await save.wait_for(state="visible")
+    logger.info("yesstyle step=inspect_save_button matches=%s", await save.count())
+    if await save.is_enabled():
+        logger.info("yesstyle step=click_save")
+        await save.click(no_wait_after=True)
+    else:
+        # Preferences may already be correct in a reused site session.
+        await page.get_by_role("button", name=re.compile(r"^\s*cancel\s*$", re.IGNORECASE)).filter(visible=True).click()
 
 
 def _verified_yesstyle_price(soup: BeautifulSoup) -> float:
