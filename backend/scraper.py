@@ -14,14 +14,11 @@ What's actually verified vs. best-effort:
   product checked — a "-timedeal-" segment in the product's own URL
   slug. All three required fields are readable with no LLM involved.
 
-  YesStyle — NOT verified the same way: a plain fetch during development
-  was blocked by their bot detection, so its real markup was never
-  inspected in a browser. The parser below checks the common patterns
-  (schema.org JSON-LD Product data, then Open Graph tags) as a
-  reasonable default, but treat these selectors as a first draft —
-  confirm them against a real rendered page (Playwright + devtools)
-  before trusting them. Coupon eligibility IS deterministic though: it
-  reads a specific disclaimer line YesStyle shows on non-eligible
+  YesStyle — always uses a browser to select Kuwait / USD / English.
+  The visible selling-price selector and preference controls were
+  inspected on product 1126934079. Quotes fail closed if the destination
+  or USD selling price cannot be verified. Coupon eligibility reads
+  a specific disclaimer line YesStyle shows on non-eligible
   products ("Coupons offering a percentage discount ... cannot be used
   with this product") and defaults to eligible when that line is absent
   — no LLM guessing involved for that field anymore.
@@ -29,6 +26,8 @@ What's actually verified vs. best-effort:
 
 import json
 import re
+import asyncio
+from urllib.parse import urlsplit
 from typing import Optional
 
 import httpx
@@ -44,6 +43,12 @@ USER_AGENT = (
     "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 )
 MIN_TEXT_LENGTH = 500  # below this, assume the page needs JS to render
+YESSTYLE_PRICE_SELECTOR = 'span[class*="__sellingPrice"]'
+YESSTYLE_REGION_ERROR = (
+    "Couldn't verify YesStyle's Kuwait price in USD. Please try again later."
+)
+# Limit browser memory use on the free backend. Each request has its own context.
+_browser_lock = asyncio.Semaphore(1)
 
 # Phrases that show up on bot-check / interstitial pages instead of real
 # product content. If we see these, the page was NOT the product page —
@@ -73,12 +78,20 @@ class BlockedPageError(Exception):
     """Raised when the fetched page is a bot-check/interstitial, not real product content."""
 
 
-def detect_store(url: str) -> Optional[str]:
-    host = re.sub(r"^https?://(www\.)?", "", url.strip(), flags=re.IGNORECASE)
-    host = host.split("/")[0].lower()
+class RegionalPricingError(BlockedPageError):
+    """Never calculate a quote from an unverified regional price."""
 
+
+def detect_store(url: str) -> Optional[str]:
+    try:
+        parsed = urlsplit(url.strip())
+        host = (parsed.hostname or "").lower()
+    except ValueError:
+        return None
+    if parsed.scheme not in {"http", "https"}:
+        return None
     for needle, store in STORE_HOSTS.items():
-        if needle in host:
+        if host == needle + ".com" or host.endswith("." + needle + ".com"):
             return store
     return None
 
@@ -95,6 +108,12 @@ async def fetch_page_html(url: str) -> str:
     IP as suspicious even when a real browser is driving the request, and
     that must surface as a loud error, never a silently wrong total.
     """
+    # A plain GET can silently return the server's default-region price.
+    # Always apply and verify destination preferences for YesStyle.
+    if detect_store(url) == "yes_style":
+        async with _browser_lock:
+            return await _fetch_with_playwright(url, kuwait_pricing=True)
+
     async with httpx.AsyncClient(follow_redirects=True, timeout=15) as client:
         try:
             resp = await client.get(
@@ -130,17 +149,78 @@ def _looks_blocked(html: str) -> bool:
     return any(signal in text for signal in BOT_CHALLENGE_SIGNALS)
 
 
-async def _fetch_with_playwright(url: str) -> str:
-    from playwright.async_api import async_playwright
+async def _fetch_with_playwright(url: str, kuwait_pricing: bool = False) -> str:
+    from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
 
     async with async_playwright() as p:
         browser = await p.chromium.launch()
         try:
-            page = await browser.new_page(user_agent=USER_AGENT)
-            await page.goto(url, wait_until="networkidle", timeout=20000)
-            return await page.content()
+            page = await browser.new_page(user_agent=USER_AGENT, locale="en-US")
+            page.set_default_timeout(15000)
+            await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            if kuwait_pricing:
+                try:
+                    await _set_yesstyle_preferences(page)
+                except (PlaywrightTimeoutError, AssertionError) as exc:
+                    raise RegionalPricingError(YESSTYLE_REGION_ERROR) from exc
+            html = await page.content()
+            if _looks_blocked(html):
+                raise BlockedPageError("YesStyle blocked the product request. Please try again later.")
+            if kuwait_pricing:
+                _verified_yesstyle_price(BeautifulSoup(html, "html.parser"))
+            return html
         finally:
             await browser.close()
+
+
+async def _set_yesstyle_preferences(page) -> None:
+    from playwright.async_api import expect
+
+    await page.get_by_role("button", name="country setting", exact=True).click()
+    destination = page.locator("#shipping-destination-setting")
+    await expect(destination).to_be_enabled()
+    await destination.click()
+    await page.get_by_role("option", name="Kuwait", exact=True).click()
+    await expect(destination).to_have_value("Kuwait")
+    # Selecting Kuwait also changes currency and language automatically.
+    await page.locator("#currency-setting-select").click()
+    await page.get_by_role("option", name="USD - US Dollar (US$)", exact=True).click()
+    await page.locator("#language-setting-select").click()
+    await page.get_by_role("option", name="English", exact=True).click()
+    await expect(destination).to_have_value("Kuwait")
+    await expect(page.locator("#currency-setting-select")).to_contain_text("USD")
+    await expect(page.locator("#language-setting-select")).to_contain_text("English")
+    save = page.get_by_role("button", name="SAVE", exact=True)
+    if await save.is_enabled():
+        await save.click()
+    else:
+        # Preferences may already be correct in a reused site session.
+        await page.get_by_role("button", name="CANCEL", exact=True).click()
+    await page.locator("#location-preference-dialog-title").wait_for(state="hidden")
+    # Reload after saving so a previous region's price cannot survive an
+    # in-flight client-side refresh. The context retains the preferences.
+    await page.reload(wait_until="domcontentloaded", timeout=30000)
+    await page.get_by_role("heading", name=re.compile(r"^Shipping to Kuwait")).wait_for()
+    await page.locator(YESSTYLE_PRICE_SELECTOR).filter(
+        has_text=re.compile(r"^US\$\s*[\d,]+\.\d{2}$")
+    ).wait_for()
+
+
+def _verified_yesstyle_price(soup: BeautifulSoup) -> float:
+    shipping = soup.find(re.compile(r"^h[1-6]$"), string=re.compile(r"Shipping to Kuwait"))
+    if shipping is None:
+        shipping = next((h for h in soup.find_all(re.compile(r"^h[1-6]$"))
+                         if re.match(r"^Shipping to Kuwait\b", h.get_text(" ", strip=True))), None)
+    prices = soup.select(YESSTYLE_PRICE_SELECTOR)
+    if shipping is None or len(prices) != 1:
+        raise RegionalPricingError(YESSTYLE_REGION_ERROR)
+    match = re.fullmatch(r"US\$\s*([\d,]+\.\d{2})", prices[0].get_text(strip=True))
+    if not match:
+        raise RegionalPricingError(YESSTYLE_REGION_ERROR)
+    price = float(match.group(1).replace(",", ""))
+    if price <= 0:
+        raise RegionalPricingError(YESSTYLE_REGION_ERROR)
+    return price
 
 
 def extract_visible_text(html: str, max_chars: int = 6000) -> str:
@@ -209,7 +289,9 @@ def _parse_style_korean(html: str, url: str) -> dict:
 
 def _parse_yes_style(html: str, url: str) -> dict:
     soup = BeautifulSoup(html, "html.parser")
-    fields: dict = {}
+    # Verified visible regional selling price takes precedence over JSON-LD,
+    # OG metadata, list prices, recommendations, and any LLM output.
+    fields: dict = {"price": _verified_yesstyle_price(soup)}
 
     for script in soup.find_all("script", attrs={"type": "application/ld+json"}):
         try:
