@@ -164,7 +164,11 @@ async def _fetch_with_playwright(url: str, kuwait_pricing: bool = False) -> str:
         browser = await p.chromium.launch()
         try:
             page = await browser.new_page(user_agent=USER_AGENT, locale="en-US")
-            page.set_default_timeout(15000)
+            page.set_default_timeout(45000 if kuwait_pricing else 15000)
+            if kuwait_pricing:
+                # Product images, videos, and fonts are unnecessary for price
+                # extraction and compete with the preferences UI for resources.
+                await page.route("**/*", _skip_visual_assets)
             logger.info("scraper step=load_product")
             await page.goto(url, wait_until="domcontentloaded", timeout=30000)
             if kuwait_pricing:
@@ -183,19 +187,29 @@ async def _fetch_with_playwright(url: str, kuwait_pricing: bool = False) -> str:
             await browser.close()
 
 
+async def _skip_visual_assets(route) -> None:
+    if route.request.resource_type in {"image", "media", "font"}:
+        await route.abort()
+    else:
+        # Keep scripts, stylesheets, documents, and all pricing API requests.
+        await route.continue_()
+
+
 async def _set_yesstyle_preferences(page) -> None:
     from playwright.async_api import expect
 
     logger.info("yesstyle step=open_preferences")
-    await page.get_by_role("button", name="country setting", exact=True).click()
+    await page.get_by_role("button", name="country setting", exact=True).click(
+        timeout=45000, no_wait_after=True
+    )
     destination = page.locator("#shipping-destination-setting")
     logger.info("yesstyle step=wait_destination_control")
-    await expect(destination).to_be_enabled()
+    await expect(destination).to_be_enabled(timeout=45000)
     logger.info("yesstyle step=select_kuwait")
     await destination.click()
     await page.get_by_role("option", name="Kuwait", exact=True).click()
     logger.info("yesstyle step=confirm_kuwait")
-    await expect(destination).to_have_value("Kuwait")
+    await expect(destination).to_have_value("Kuwait", timeout=45000)
     # Selecting Kuwait also changes currency and language automatically.
     logger.info("yesstyle step=select_usd")
     await page.locator("#currency-setting-select").click()
@@ -204,13 +218,13 @@ async def _set_yesstyle_preferences(page) -> None:
     await page.locator("#language-setting-select").click()
     await page.get_by_role("option", name="English", exact=True).click()
     logger.info("yesstyle step=confirm_preferences")
-    await expect(destination).to_have_value("Kuwait")
-    await expect(page.locator("#currency-setting-select")).to_contain_text("USD")
-    await expect(page.locator("#language-setting-select")).to_contain_text("English")
+    await expect(destination).to_have_value("Kuwait", timeout=45000)
+    await expect(page.locator("#currency-setting-select")).to_contain_text("USD", timeout=45000)
+    await expect(page.locator("#language-setting-select")).to_contain_text("English", timeout=45000)
     logger.info("yesstyle step=save_preferences")
     save = page.get_by_role("button", name="SAVE", exact=True)
     if await save.is_enabled():
-        await save.click()
+        await save.click(no_wait_after=True)
     else:
         # Preferences may already be correct in a reused site session.
         await page.get_by_role("button", name="CANCEL", exact=True).click()

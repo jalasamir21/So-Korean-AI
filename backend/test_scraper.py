@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, patch
 
 from scraper import (
     RegionalPricingError, detect_store, extract_with_selectors, fetch_page_html,
+    _skip_visual_assets,
 )
 
 
@@ -54,6 +55,20 @@ class RegionalPriceTests(unittest.TestCase):
 
 
 class FetchTests(unittest.IsolatedAsyncioTestCase):
+    async def test_only_visual_assets_are_skipped(self):
+        from types import SimpleNamespace
+        for kind in ("image", "media", "font", "script", "stylesheet", "document", "xhr", "fetch"):
+            with self.subTest(resource_type=kind):
+                route = SimpleNamespace(request=SimpleNamespace(resource_type=kind),
+                                        abort=AsyncMock(), continue_=AsyncMock())
+                await _skip_visual_assets(route)
+                if kind in {"image", "media", "font"}:
+                    route.abort.assert_awaited_once()
+                    route.continue_.assert_not_awaited()
+                else:
+                    route.continue_.assert_awaited_once()
+                    route.abort.assert_not_awaited()
+
     async def test_yesstyle_always_uses_regional_browser_flow(self):
         with patch("scraper._fetch_with_playwright", new_callable=AsyncMock) as browser:
             browser.return_value = product_html()
