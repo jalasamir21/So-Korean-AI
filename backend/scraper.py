@@ -27,11 +27,14 @@ What's actually verified vs. best-effort:
 import json
 import re
 import asyncio
+import logging
 from urllib.parse import urlsplit
 from typing import Optional
 
 import httpx
 from bs4 import BeautifulSoup
+
+logger = logging.getLogger("sokorean.scraper")
 
 STORE_HOSTS = {
     "stylekorean": "style_korean",
@@ -112,7 +115,11 @@ async def fetch_page_html(url: str) -> str:
     # Always apply and verify destination preferences for YesStyle.
     if detect_store(url) == "yes_style":
         async with _browser_lock:
-            return await _fetch_with_playwright(url, kuwait_pricing=True)
+            try:
+                return await _fetch_with_playwright(url, kuwait_pricing=True)
+            except Exception:
+                logger.exception("YesStyle regional fetch failed")
+                raise
 
     async with httpx.AsyncClient(follow_redirects=True, timeout=15) as client:
         try:
@@ -153,10 +160,12 @@ async def _fetch_with_playwright(url: str, kuwait_pricing: bool = False) -> str:
     from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
 
     async with async_playwright() as p:
+        logger.info("scraper step=launch_browser kuwait_pricing=%s", kuwait_pricing)
         browser = await p.chromium.launch()
         try:
             page = await browser.new_page(user_agent=USER_AGENT, locale="en-US")
             page.set_default_timeout(15000)
+            logger.info("scraper step=load_product")
             await page.goto(url, wait_until="domcontentloaded", timeout=30000)
             if kuwait_pricing:
                 try:
@@ -167,6 +176,7 @@ async def _fetch_with_playwright(url: str, kuwait_pricing: bool = False) -> str:
             if _looks_blocked(html):
                 raise BlockedPageError("YesStyle blocked the product request. Please try again later.")
             if kuwait_pricing:
+                logger.info("yesstyle step=verify_html")
                 _verified_yesstyle_price(BeautifulSoup(html, "html.parser"))
             return html
         finally:
@@ -176,31 +186,43 @@ async def _fetch_with_playwright(url: str, kuwait_pricing: bool = False) -> str:
 async def _set_yesstyle_preferences(page) -> None:
     from playwright.async_api import expect
 
+    logger.info("yesstyle step=open_preferences")
     await page.get_by_role("button", name="country setting", exact=True).click()
     destination = page.locator("#shipping-destination-setting")
+    logger.info("yesstyle step=wait_destination_control")
     await expect(destination).to_be_enabled()
+    logger.info("yesstyle step=select_kuwait")
     await destination.click()
     await page.get_by_role("option", name="Kuwait", exact=True).click()
+    logger.info("yesstyle step=confirm_kuwait")
     await expect(destination).to_have_value("Kuwait")
     # Selecting Kuwait also changes currency and language automatically.
+    logger.info("yesstyle step=select_usd")
     await page.locator("#currency-setting-select").click()
     await page.get_by_role("option", name="USD - US Dollar (US$)", exact=True).click()
+    logger.info("yesstyle step=select_english")
     await page.locator("#language-setting-select").click()
     await page.get_by_role("option", name="English", exact=True).click()
+    logger.info("yesstyle step=confirm_preferences")
     await expect(destination).to_have_value("Kuwait")
     await expect(page.locator("#currency-setting-select")).to_contain_text("USD")
     await expect(page.locator("#language-setting-select")).to_contain_text("English")
+    logger.info("yesstyle step=save_preferences")
     save = page.get_by_role("button", name="SAVE", exact=True)
     if await save.is_enabled():
         await save.click()
     else:
         # Preferences may already be correct in a reused site session.
         await page.get_by_role("button", name="CANCEL", exact=True).click()
+    logger.info("yesstyle step=wait_preferences_closed")
     await page.locator("#location-preference-dialog-title").wait_for(state="hidden")
     # Reload after saving so a previous region's price cannot survive an
     # in-flight client-side refresh. The context retains the preferences.
+    logger.info("yesstyle step=reload_product")
     await page.reload(wait_until="domcontentloaded", timeout=30000)
+    logger.info("yesstyle step=verify_shipping_destination")
     await page.get_by_role("heading", name=re.compile(r"^Shipping to Kuwait")).wait_for()
+    logger.info("yesstyle step=wait_usd_selling_price")
     await page.locator(YESSTYLE_PRICE_SELECTOR).filter(
         has_text=re.compile(r"^US\$\s*[\d,]+\.\d{2}$")
     ).wait_for()
@@ -213,9 +235,12 @@ def _verified_yesstyle_price(soup: BeautifulSoup) -> float:
                          if re.match(r"^Shipping to Kuwait\b", h.get_text(" ", strip=True))), None)
     prices = soup.select(YESSTYLE_PRICE_SELECTOR)
     if shipping is None or len(prices) != 1:
+        logger.error("yesstyle validation shipping_kuwait=%s selling_price_count=%s",
+                     shipping is not None, len(prices))
         raise RegionalPricingError(YESSTYLE_REGION_ERROR)
     match = re.fullmatch(r"US\$\s*([\d,]+\.\d{2})", prices[0].get_text(strip=True))
     if not match:
+        logger.error("yesstyle validation unexpected_selling_price=%r", prices[0].get_text(strip=True))
         raise RegionalPricingError(YESSTYLE_REGION_ERROR)
     price = float(match.group(1).replace(",", ""))
     if price <= 0:
